@@ -83,7 +83,7 @@ def make_threeband_image_process_bandmaps(
 
     f_saturated=0.0004  ## fraction of pixels that should be saturated
     f_saturated=0.0001  ## fraction of pixels that should be saturated
-    x0 = int_round( f_saturated * (np.float(checklen(r)) - 1.) )
+    x0 = int_round( f_saturated * (float(checklen(r)) - 1.) )
 
     for rgb_v in [r,g,b]: 
         rgbm = single_vec_sorted(rgb_v,reverse=True)
