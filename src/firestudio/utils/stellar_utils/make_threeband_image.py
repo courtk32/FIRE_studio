@@ -3,7 +3,7 @@ import matplotlib
 
 def checklen(x): return np.array(x).shape[0]
 
-def int_round(x): return np.int(np.round(x))
+def int_round(x): return int(np.round(x))
 
 def ok_scan(arr,xmax=1.0e10,pos=0):
     if (pos==0): return np.logical_and(
