@@ -4,9 +4,7 @@ from abg_python.math_utils import rotateQuaternion_math
 
 class Camera(object):
     def __repr__(self):
-        
-        roll_str = f"{self.camera_roll}" if self.camera_roll is not None else ''
-        return "Camera(pos=%s,focus=%s%s)"%(repr(self.camera_pos),repr(self.camera_focus),roll_str)
+        return "Camera(%s,%s) - %s "%(repr(self.camera_pos),repr(self.camera_focus),repr(self.quaternion))
 
     def __init__(
         self,
@@ -45,7 +43,7 @@ class Camera(object):
         """
 
         ## for some reason this seems to work best when everything is negated?? lmfao
-        camera_pos = np.array(camera_pos,ndmin=1,dtype=float)#*-1
+        camera_pos = np.array(camera_pos,ndmin=1)
 
         ## default to looking at the origin 
         if camera_focus is None: camera_focus = np.zeros(3)
@@ -57,10 +55,9 @@ class Camera(object):
 
         ## define the look vector as pointing from the camera *to* the focus
         ##  i.e. a positive projection along camera_normal -> in front of the camera
-        self.camera_normal = self.camera_focus-self.camera_pos
-
-        if np.allclose(self.camera_normal[:2],[0,0]): self.camera_normal[0]=self.camera_normal[0]+1e-5
-
+        ## TODO why does self.camera_pos need to be negated??
+        ##  camera_test() produces intuitive results only when it is :\
+        self.camera_normal = self.camera_focus-(-self.camera_pos) 
         self.camera_dist = np.linalg.norm(self.camera_normal)
         self.camera_normal = self.camera_normal/self.camera_dist
 
@@ -78,7 +75,6 @@ class Camera(object):
         self.camera_east /= np.linalg.norm(self.camera_east)
         self.camera_north = np.cross(self.camera_normal, self.camera_east).ravel()
 
-        self.camera_roll = camera_roll
         ## roll the camera about its normal vector if requested
         ##  easiest to do with a quaternion rotation
         if camera_roll is not None:
@@ -108,7 +104,9 @@ class Camera(object):
         :rtype: np.ndarray
         """
 
-        if offset: offset = self.camera_pos
+        ## TODO why does self.camera_pos need to be negated??
+        ##  camera_test() produces intuitive results only when it is :\
+        if offset: offset = -self.camera_pos
         else: offset = 0
 
         projected_arr = np.sum(self.camera_axes*(arr-offset)[:,None],axis=-1) 
