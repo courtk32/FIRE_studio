@@ -120,7 +120,7 @@ def raytrace_projection_compute(
     ## determine shape of output
     aspect_ratio = ylen/xlen
     Xpixels = int_round(pixels)
-    Ypixels = int_round(aspect_ratio*np.float(Xpixels))
+    Ypixels = int_round(aspect_ratio*float(Xpixels))
     N_pixels = Xpixels*Ypixels
 
     if (TRIM_PARTICLES==1): tolfac = 0.05
