@@ -17,7 +17,6 @@ from firestudio.studios.FIRE_studio import FIREStudio
 from firestudio.studios.simple_studio import SimpleStudio
 from firestudio.studios.composition import Composition
 
-### global variables
 prev_galaxy,next_galaxy = None,None
 merged_gas_df,merged_star_df = None,None
 
@@ -48,13 +47,16 @@ def single_threaded_control_flow(
     ## initialize the variables which we'll use
     ##  to avoid loading from disk unless we have to
     ##  i.e. moving next -> prev, etc...
+    prev_snapnum,next_snapnum = None,None
     snapdict,star_snapdict = None,None
 
     snap_pairs = [scene_kwargs['snap_pair'] for scene_kwargs in scene_kwargss]
     if not ABG_force_multithread:
         return_values = []
         for scene_kwargs in scene_kwargss:     
-            snapdict,star_snapdict,return_value = render_this_scene(
+            (prev_snapnum, next_snapnum,
+            snapdict,star_snapdict,
+            return_value) = render_this_scene(
                 which_studios, ##Nstudios
                 galaxy_kwargs, ## 1 dictionary shared by all scenes
                 scene_kwargs, ## 1 dictionary for this scene
@@ -63,6 +65,7 @@ def single_threaded_control_flow(
                 datadir,
                 timestamp,
                 load_gas,load_star,
+                prev_snapnum,next_snapnum,
                 snapdict,star_snapdict,
                 ABG_force_multithread,
                 polar)
@@ -73,6 +76,7 @@ def single_threaded_control_flow(
         (t0,t1) = scene_kwargss[0]['snap_pair_time']
         this_time = scene_kwargss[0]['time']
         snapdict,star_snapdict = get_interpolated_snaps(
+            prev_snapnum,next_snapnum,
             pair,
             t0,t1,
             this_time,
@@ -80,6 +84,7 @@ def single_threaded_control_flow(
             polar=polar,
             **galaxy_kwargs)
 
+        prev_snapnum,next_snapnum = pair
         ## set inside get_interpolated snaps, we won't need them
         ##  anymore
         global next_galaxy,prev_galaxy
@@ -103,6 +108,8 @@ def single_threaded_control_flow(
             itertools.repeat(timestamp),
             itertools.repeat(load_gas),
             itertools.repeat(load_star),
+            itertools.repeat(prev_snapnum),
+            itertools.repeat(next_snapnum),
             itertools.repeat(snapdict),
             itertools.repeat(star_snapdict),
             itertools.repeat(ABG_force_multithread),
@@ -125,6 +132,7 @@ def render_this_scene(
     datadir,
     timestamp,
     load_gas,load_star,
+    prev_snapnum,next_snapnum,
     snapdict,star_snapdict,
     ABG_force_multithread,
     polar=True):
@@ -164,15 +172,16 @@ def render_this_scene(
             studio_kwargss,
             [{'assert_cached':True,'loud':False,**render_kwargs} for render_kwargs in render_kwargss])
         if not ABG_force_multithread:
-            return snapdict,star_snapdict,return_value
+            return prev_snapnum,next_snapnum,snapdict,star_snapdict,return_value
         else: return return_value
     ## yeah alright, it was worth a shot. let's load from disk and project then
     except (AssertionError,KeyError): pass #raise
 
     ## determine if we've already loaded the data or if we need to open it from disk
-    snapdict,star_snapdict = load_data_from_disk_if_necessary(
+    snapdict,star_snapdict,prev_snapnum,next_snapnum = load_data_from_disk_if_necessary(
         galaxy_kwargs,
         scene_kwargs,
+        prev_snapnum,next_snapnum,
         snapdict,star_snapdict,
         load_gas,load_star,
         polar=polar) ## determines what coordinates we save in snapdict
@@ -187,7 +196,7 @@ def render_this_scene(
         render_kwargss)
 
     if not ABG_force_multithread:
-        return snapdict,star_snapdict,return_value
+        return prev_snapnum,next_snapnum,snapdict,star_snapdict,return_value
     else: return return_value
 
 def render_ffmpeg_frames(studio_kwargss,galaxy_kwargs,nframes,fps):
@@ -216,6 +225,7 @@ def render_ffmpeg_frames(studio_kwargss,galaxy_kwargs,nframes,fps):
 def load_data_from_disk_if_necessary(
     galaxy_kwargs,
     scene_kwargs,
+    prev_snapnum,next_snapnum,
     snapdict,star_snapdict,
     load_gas,load_star,
     polar=True):
@@ -234,13 +244,15 @@ def load_data_from_disk_if_necessary(
         (t0,t1) = scene_kwargs['snap_pair_time']
         this_time = scene_kwargs['time']
         snapdict,star_snapdict = get_interpolated_snaps(
+            prev_snapnum,next_snapnum,
             pair,
             t0,t1,
             this_time,
             load_gas,load_star,
             polar=polar,
             **galaxy_kwargs)
-    return snapdict,star_snapdict,
+        prev_snapnum,next_snapnum = pair
+    return snapdict,star_snapdict,prev_snapnum,next_snapnum
 
 def get_single_snap(
     load_gas,
@@ -300,13 +312,15 @@ def get_single_snap(
     return snapdict,star_snapdict
     
 def get_interpolated_snaps(
+    prev_snapnum,
+    next_snapnum,
     pair,
     t0,t1,
     this_time,
     load_gas,load_star,
     keys_to_extract=None,
     polar=True, ## use polar interpolation for coordinates?
-    take_avg_L=True,
+    take_avg_L=False,
     **galaxy_kwargs):
 
     if keys_to_extract is None: keys_to_extract = []
@@ -317,6 +331,7 @@ def get_interpolated_snaps(
     ## determine if the galaxies in the pair are actually
     ##  changed, and if so, open their data from the disk.
     prev_galaxy,next_galaxy,changed = load_gals_from_disk(
+        prev_snapnum,next_snapnum,
         pair,
         prev_galaxy,
         next_galaxy,
@@ -325,102 +340,106 @@ def get_interpolated_snaps(
         **galaxy_kwargs)
 
     ## update the previous/next snapnums
+    prev_snapnum,next_snapnum = pair
     ## make an interpolated snapshot with these galaxies,
     ##  this takes a while so we'll hold onto it and only 
     ##  make a new one if necessary.
-    if pair[0] == pair[1]:
-        interp_gas_snapdict = prev_galaxy.sub_snap if load_gas else {}
-        interp_star_snapdict = prev_galaxy.sub_star_snap if load_star else {}
-    else:
-        if changed:
-            ## create the gas dataframes if necessary
-            if load_gas: 
-                #print("converting gas to DF")
-                prev_gas_df = convertToDF(prev_galaxy.sub_snap,keys_to_extract,polar)
-                next_gas_df = convertToDF(next_galaxy.sub_snap,keys_to_extract,polar)
+    #changed = True
+    if changed:
+        ## create the gas dataframes if necessary
+        if load_gas: 
+            #print("converting gas to DF")
+            prev_gas_df = convertToDF(prev_galaxy.sub_snap,keys_to_extract,polar)
+            next_gas_df = convertToDF(next_galaxy.sub_snap,keys_to_extract,polar)
+        
+        ## create the star dataframes if necessary
+        if load_star:
+            #print("converting stars to DF")
+            prev_star_df = convertToDF(prev_galaxy.sub_star_snap,keys_to_extract,polar)
+            next_star_df = convertToDF(next_galaxy.sub_star_snap,keys_to_extract,polar)
 
-                ## debugging tool for trying to force consistent sets of particles
-                ##  across snapshot boundaries
-                #if merged_gas_df is not None and False:
-                    #print('previous filtering')
-                    #prev_snap = merged_gas_df.index[merged_gas_df.index.isin(prev_gas_df.index)]
-                    #prev_gas_df = prev_gas_df.loc[prev_snap]
-                    #prev_snap = merged_gas_df.index[merged_gas_df.index.isin(next_gas_df.index)]
-                    #next_gas_df = next_gas_df.loc[prev_snap]
-            
-            ## create the star dataframes if necessary
-            if load_star:
-                #print("converting stars to DF")
-                prev_star_df = convertToDF(prev_galaxy.sub_star_snap,keys_to_extract,polar)
-                next_star_df = convertToDF(next_galaxy.sub_star_snap,keys_to_extract,polar)
+        ## if we have both, we can try to cross-match the positions
+        ##  of particles between them
+        if load_gas and load_star:
+            #print("cross-matching starformed gas")
 
-            ## if we have both, we can try to cross-match the positions
-            ##  of particles between them
-            if load_gas and load_star:
-                #print("cross-matching starformed gas")
+            ## add AgeGyr arrays which will be used to disappear gas particles
+            ##  when we multi index match them with splits/stars
+            prev_gas_df['AgeGyr'] = np.ones(prev_gas_df.shape[0])
+            next_gas_df['AgeGyr'] = np.ones(next_gas_df.shape[0])
 
-                ## add AgeGyr arrays which will be used to disappear gas particles
-                ##  when we multi index match them with splits/stars
-                prev_gas_df['AgeGyr'] = np.ones(prev_gas_df.shape[0])
-                next_gas_df['AgeGyr'] = np.ones(next_gas_df.shape[0])
-
-                (prev_gas_df,
-                next_gas_df,
-                prev_star_df,
-                next_star_df) = cross_match_starformed_gas(
-                    t0,t1,
-                    prev_gas_df,next_gas_df,
-                    prev_star_df,next_star_df)
+            (prev_gas_df,
+            next_gas_df,
+            prev_star_df,
+            next_star_df) = cross_match_starformed_gas(
+                t0,t1,
+                prev_gas_df,next_gas_df,
+                prev_star_df,next_star_df)
 
 
-            if load_gas:
-                ## merge rows of dataframes based on particle ID
-                merged_gas_df = prev_gas_df.join(
-                    next_gas_df,
-                    rsuffix='_next',
-                    how='outer')
+        if load_gas:
+            ## look for ancestor gas particles for those particles which split
+            """
+            merged_gas_df = search_multi_ids(
+                merged_gas_df, ## df to search for ancestors
+                merged_gas_df, ## df w/ targets
+                forward=False) ## look in the past
                 
-                del prev_galaxy.sub_snap
-                #del next_galaxy.sub_snap ## don't delete this b.c. we'll need it when we load the next one
+            if load_star:
+                ## find final position that gas particles which turn into stars
+                ##  should interpolate toward
+                search_multi_ids(
+                    merged_star_df, ## df to use as lookup
+                    merged_gas_df, ## df w/ targets
+                    forward=True) ## look in the future
+            """
+            ## merge rows of dataframes based on particle ID
+            merged_gas_df = prev_gas_df.join(
+                next_gas_df,
+                rsuffix='_next',
+                how='outer')
+            
+            del prev_galaxy.sub_snap
+            #del next_galaxy.sub_snap ## don't delete this b.c. we'll need it when we load the next one
 
-                ## fill values w. extrapolation in both directions
-                ##  add polar coordinates and velocities, and drop any remaining nans or duplicates
-                merged_gas_df = finalize_df(
-                    t0,t1,
-                    merged_gas_df,
-                    polar=polar,
-                    take_avg_L=take_avg_L)
+            ## fill values w. extrapolation in both directions
+            ##  add polar coordinates and velocities, and drop any remaining nans or duplicates
+            merged_gas_df = finalize_df(
+                t0,t1,
+                merged_gas_df,
+                polar=polar,
+                take_avg_L=take_avg_L)
 
-            if load_star: 
-                ## merge rows of dataframes based on particle ID
-                merged_star_df = prev_star_df.join(
-                    next_star_df,
-                    rsuffix='_next',
-                    how='outer')
+        if load_star: 
+            ## merge rows of dataframes based on particle ID
+            merged_star_df = prev_star_df.join(
+                next_star_df,
+                rsuffix='_next',
+                how='outer')
 
-                del prev_galaxy.sub_star_snap
-                #del next_galaxy.sub_star_snap ## don't delete this b.c. we'll need it when we load the next one
+            del prev_galaxy.sub_star_snap
+            #del next_galaxy.sub_star_snap ## don't delete this b.c. we'll need it when we load the next one
 
-                ## fill values w. extrapolation in both directions
-                ##  add polar coordinates and velocities, and drop any remaining nans or duplicates
-                merged_star_df = finalize_df(
-                    t0,t1,
-                    merged_star_df,
-                    polar=polar,
-                    take_avg_L=take_avg_L)
-        else: pass ## [ if changed: ] 
+            ## fill values w. extrapolation in both directions
+            ##  add polar coordinates and velocities, and drop any remaining nans or duplicates
+            merged_star_df = finalize_df(
+                t0,t1,
+                merged_star_df,
+                polar=polar,
+                take_avg_L=take_avg_L)
+    else: pass ## [ if changed: ] 
 
-        ## create the interp_snap with new values for the new time
-        if load_gas: interp_gas_snapdict = make_interpolated_snap(
-            t0,t1,
-            merged_gas_df,
-            this_time) 
-        else: interp_gas_snapdict = {}            
-        if load_star: interp_star_snapdict = make_interpolated_snap(
-            t0,t1,
-            merged_star_df,
-            this_time)
-        else: interp_star_snapdict = {}
+    ## create the interp_snap with new values for the new time
+    if load_gas: interp_gas_snapdict = make_interpolated_snap(
+        t0,t1,
+        merged_gas_df,
+        this_time) 
+    else: interp_gas_snapdict = {}            
+    if load_star: interp_star_snapdict = make_interpolated_snap(
+        t0,t1,
+        merged_star_df,
+        this_time)
+    else: interp_star_snapdict = {}
 
     ## keep outside the conditional b.c. worker function
     ##  looks for them in gas_snapdict
@@ -443,6 +462,7 @@ def get_interpolated_snaps(
 
 
 def load_gals_from_disk(
+    prev_snapnum,next_snapnum,
     pair,
     prev_galaxy,next_galaxy,
     testing=False,
@@ -463,9 +483,9 @@ def load_gals_from_disk(
 
     ## -- check the prev galaxy
     ## keep the current snapnum
-    if prev_galaxy is not None and pair[0] == prev_galaxy.snapnum: prev_galaxy=prev_galaxy
+    if pair[0] == prev_snapnum: prev_galaxy=prev_galaxy
     ## step forward in time, swap pointers
-    elif next_galaxy is not None and pair[0] == next_galaxy.snapnum:
+    elif pair[0] == next_snapnum:
         prev_galaxy = next_galaxy
         next_galaxy = None
     ## will need to read from disk
@@ -473,7 +493,7 @@ def load_gals_from_disk(
     
     ## -- now the next galaxy
     ## keep the current snapnum
-    if next_galaxy is not None and pair[1] == next_galaxy.snapnum: next_galaxy = next_galaxy
+    if pair[1] == next_snapnum: next_galaxy = next_galaxy
     ## will need to read from disk
     else: next_galaxy = None
 
@@ -500,9 +520,6 @@ def load_gals_from_disk(
                     prev_galaxy.sub_star_snap])
         else: prev_galaxy = pair[0]
         changed = True
-    
-    ## handle the scenario when we're interpolating in space, not in time
-    if pair[0] == pair[1]: next_galaxy = prev_galaxy
     if next_galaxy is None:
         print('loading',pair[1],'from disk')
         if not testing:
@@ -603,7 +620,15 @@ def worker_function(
     else: this_savefig = None
 
     ## decide what we want to pass to the GasStudio
-    if which_studio is GasStudio: render_kwargs = {}
+    if which_studio is GasStudio: render_kwargs = {
+        'weight_name':'Masses',
+        'quantity_name':'Temperature',
+        'min_quantity':2,
+        'max_quantity':7,
+        'quantity_adjustment_function':np.log10,
+        #'min_weight':-0.5,
+        #'max_weight':3,
+        }
     elif which_studio is StarStudio: render_kwargs = {}
     elif which_studio is FIREStudio: render_kwargs = {}
     elif which_studio is SimpleStudio: render_kwargs = {}
@@ -633,12 +658,15 @@ def worker_function(
         setup_id_append=setup_id_append,
         **{'master_loud':False,**studio_kwargs,'savefig':this_savefig})
 
+    if which_studio is GasStudio and render_kwargs['weight_name'] == 'Masses':
+        render_kwargs['weight_adjustment_function'] = lambda x: np.log10(x/my_studio.Acell) + 10 - 6 ## msun/pc^2,
+    
+
     ## ignore warnings to reduce console spam
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         ## overwrite loud rendering to reduce console spam
         ax,im = my_studio.render(None,**{**render_kwargs,'loud':False})
-
     axs = np.array([ax]).reshape(-1)
     fig = axs[0].get_figure()
 

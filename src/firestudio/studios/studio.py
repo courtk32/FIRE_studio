@@ -1,6 +1,5 @@
 import os
 import numpy as np 
-import inspect
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import rgb_to_hsv,hsv_to_rgb
@@ -44,7 +43,6 @@ class Drawer(object):
     def render(
         self,
         ax:plt.Axes=None,
-        inset_axes:bool=False,
         **kwargs):
         """ Generates an image with the `produceImage` method and then plots it with the `plotImage` method.
 
@@ -68,33 +66,18 @@ class Drawer(object):
         ## plot that RGB image and overlay scale bars/text
         self.plotImage(ax,final_image)
 
-        if inset_axes: self.drawInsetAxes(ax)
-
         ## save the image
         if self.savefig is not None:
             self.saveFigure(fig,self.savefig)
 
         return ax,final_image
 
-    def drawInsetAxes(
-        self,
-        ax:plt.Axes,
-        loc='bottom right',
-        **kwargs):
-
-        if loc != 'bottom right': raise NotImplementedError
-        bounds = [0.75,0.01,0.2,0.2]
-        new_ax = ax.inset_axes(bounds)
-        self.drawCoordinateAxes(new_ax,add_labels=False)
-        new_ax.axis('off')
-
     def drawCoordinateAxes(
         self,
         ax:plt.Axes,
         spacing:float=1,
         length:float=10,
-        colors:list=None,
-        add_labels:bool=True):
+        colors:list=None):
         """[summary]
 
         Parameters
@@ -128,32 +111,31 @@ class Drawer(object):
             coordinates[points.size*i:points.size*(i+1),i] = points 
         
         ## perform the rotation
-        coordinates = self.camera.project_array(coordinates,offset=False)
-        #if np.sum(mask) == 0: return ax
+        coordinates,mask = self.camera.project_and_clip(coordinates)
+        if np.sum(mask) == 0: return ax
 
         ## plot the new x-y coordiantes
         for i in range(3):
             these_coords = coordinates[points.size*i:points.size*(i+1)]
-            ax.plot(these_coords[:,0],these_coords[:,1],ls='-',marker='.',markersize=3,lw=3,color=colors[i])
+            ax.plot(these_coords[:,0],these_coords[:,1],'.',color=colors[i])
 
-        #ax.plot(0,0,c=colors[-1])
+        ax.plot(0,0,'.',c=colors[-1])
         for i,label in enumerate(['x','y','z']):
             x,y,z = coordinates[points.size*(i+1)-1]
             ax.text(x,y,label,fontdict={'color':'white'})
 
-        ax.set_facecolor('None')
+        ax.set_facecolor('k')
         ax.set_aspect(1)
         ax.set_xlim(-length,length)
         ax.set_ylim(-length,length)
 
         subtitle = str(np.round(self.camera.project_array(np.identity(3),offset=False),1))
         subtitle = subtitle.replace('[','').replace(']','')
-        if add_labels:
-            nameAxes(
-                ax,None,None,None,
-                subtitle=subtitle,
-                supertitle=str(np.round(self.camera.camera_pos,0)),
-                swap_annotate_side=True,font_color='w')
+        nameAxes(
+            ax,None,None,None,
+            subtitle=subtitle,
+            supertitle=str(np.round(self.camera.camera_pos,0)),
+            swap_annotate_side=True,font_color='w')
         return ax
 
     def plotImage(
@@ -180,7 +162,7 @@ class Drawer(object):
 
         ## fill the pixels of the the scale bar with white
         if self.scale_bar:
-            self.addScaleBar(ax,final_image)
+            self.addScaleBar(final_image)
 
         ## main imshow call
         imgplot = ax.imshow(
@@ -209,7 +191,7 @@ class Drawer(object):
         self.addText(ax)
 
 ####### image utilities #######
-    def addScaleBar(self,ax:plt.Axes,image:np.ndarray):
+    def addScaleBar(self,image:np.ndarray):
         """[summary]
 
         Parameters
@@ -226,17 +208,19 @@ class Drawer(object):
         ## set scale bar length
         self.scale_label_text = r"$\mathbf{%1g \, \rm{kpc}}$"%self.scale_line_length
 
+        # Convert to pixel space
+        length_per_pixel = (self.Xmax - self.Xmin) / self.npix_x
+        self.scale_line_length_px = int(self.scale_line_length / length_per_pixel)
 
+        # Position in terms of image array indices
+        scale_line_x_start = int(0.05 * self.npix_x)
+        scale_line_x_end = min(scale_line_x_start + self.scale_line_length_px,self.npix_x)
+        scale_line_y = int(0.02 * self.npix_y)
 
-        xstart = -0.90*self.camera.frame_half_width
-        scale_line_y = -0.95*self.camera.frame_half_width
-        ax.plot(
-            [xstart,xstart+self.scale_line_length],
-            [scale_line_y,scale_line_y],
-            color='w' if self.font_color in ['w','white'] else 'k',
-            lw=3
-            )
-
+        npix_thick = 12
+        # Go through pixels for scale bar, setting them to white
+        for x_index in range(scale_line_x_start, scale_line_x_end):
+            image[scale_line_y:scale_line_y+npix_thick, x_index,:3] = 1 if self.font_color in ['w','white'] else 0
         return image
 
     def addText(self,ax:plt.Axes):
@@ -519,12 +503,12 @@ class Studio(Drawer):
         #self.makeOutputDirectories(datadir)
  
         if 'camera' not in kwargs or kwargs['camera'] is None:
-            camera_kwargs = {'camera_pos':[0,0,15]}
-
-            signature = inspect.signature(Camera.__init__)
-            for ckwarg,parameter in signature.parameters.items(): 
+            camera_kwargs = {
+                'camera_pos':[0,0,15],
+                'camera_focus':[0,0,0],
+                'camera_north':None}
+            for ckwarg in list(camera_kwargs.keys())+['quaternion']:
                 if ckwarg in kwargs: camera_kwargs[ckwarg] = kwargs.pop(ckwarg)
-
             kwargs['camera'] = Camera(**camera_kwargs)
 
         ## initialize the object with some default image params that will
@@ -873,7 +857,7 @@ studio.set_ImageParams(
     def print_ImageParams(self):
         """ Prints the current image parameters."""
         default_kwargs = [
-            'camera',
+            'frame_half_thickness',
             'aspect_ratio',
             'pixels', 
             'figure_label', 
