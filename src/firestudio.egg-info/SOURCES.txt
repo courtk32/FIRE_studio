@@ -4,10 +4,12 @@
 LICENSE
 README.md
 pyproject.toml
+setup.cfg
 setup.py
 .github/ISSUE_TEMPLATE/help-request.md
 src/firestudio/__init__.py
 src/firestudio/gas_movie_maker.py
+src/firestudio/productions.py
 src/firestudio/star_movie_maker.py
 src/firestudio.egg-info/PKG-INFO
 src/firestudio.egg-info/SOURCES.txt

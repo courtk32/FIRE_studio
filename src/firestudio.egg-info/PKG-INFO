@@ -1,19 +1,32 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: firestudio
-Version: 2.1.0
+Version: 2.1.2b2
 Summary: Rendering code for FIRE simulation data.
 Home-page: https://github.com/agurvich/FIRE_studio
 Author: Alex Gurvich
 Author-email: agurvich@u.northwestern.edu
-License: UNKNOWN
 Project-URL: Bug Tracker, https://github.com/agurvich/FIRE_studio/issues
-Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE
+Requires-Dist: abg_python>=1.1.1
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: matplotlib
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 # FIRE_studio
 [![Build Status](https://travis-ci.com/agurvich/FIRE_studio.svg?branch=main)](https://app.travis-ci.com/agurvich/FIRE_studio)
@@ -133,5 +146,3 @@ my_starStudio.render(plt.gca())
 Where `star_snapdict` is a python dictionary holding the snapshot arrays for `PartType4` with keys that match the FIRE defaults. `abg_python.snap_utils.openSnapshot` will do this for you. If you are making an image of an isolated galaxy, you should remember to merge the dictionaries of `PartType2`, `PartType3`, and `PartType4`.
 
 For more information on the functionality and the different keyword arguments, see the corresponding [wiki page](https://github.com/agurvich/FIRE_studio/wiki/star_studio).
-
-
