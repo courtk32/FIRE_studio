@@ -1,5 +1,6 @@
 import subprocess
 import os
+import importlib
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
@@ -29,6 +30,11 @@ def custom_command(prepend=''):
         process.wait()
 
 def post_build_cmd():
+    '''
+    The script uses this to run `make` in all the C_routine directories in the
+    `build` directory. When pip copies everything from `build` into 
+    `site-packages`, the compiled C scripts will follow.
+    '''
     C_routine_subdir = 'build/lib/firestudio/utils/C_routines'
     C_routines = os.listdir(C_routine_subdir)
     for C_routine in C_routines:
@@ -38,6 +44,16 @@ def post_build_cmd():
             cwd=os.path.join(C_routine_subdir,C_routine))
         process.wait()
     return None
+
+def get_version():
+    '''
+    Get version number from src/firestudio/__version__.py
+    '''
+    version_file = os.path.join('src', "firestudio", "__version__.py")
+    spec = importlib.util.spec_from_file_location("version", version_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.__version__
         
 class CustomBuild(setuptools.command.build_py.build_py):
     def run(self):
@@ -66,7 +82,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="firestudio",
-    version="2.1.2b4",
+    version=get_version(),
     author = 'Alex Gurvich',
     author_email = 'agurvich@u.northwestern.edu',
     description="Rendering code for FIRE simulation data.",

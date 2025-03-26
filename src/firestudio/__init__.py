@@ -1,6 +1,8 @@
 import os
 import subprocess
 
+from .__version__ import __version__
+
 def build_C_routines(prepend=''):
     ## cd to whichever folder contains this file
     os.chdir(os.path.dirname(__file__))
