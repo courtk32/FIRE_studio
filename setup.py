@@ -58,7 +58,7 @@ def get_version():
 class CustomBuild(setuptools.command.build_py.build_py):
     def run(self):
         super().run()
-        post_build_cmd()
+        #post_build_cmd()
 
 class CustomInstall(install):
     def run(self):
