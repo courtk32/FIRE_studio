@@ -6,10 +6,14 @@ from setuptools.command.install import install
 from setuptools.command.develop import develop
 from setuptools.command.egg_info import egg_info
 
+import setuptools.command.build_py
+
 ####
-#https://stackoverflow.com/questions/19569557/pip-not-picking-up-a-custom-install-cmdclass
+#(https://stackoverflow.com/questions/19569557/
+#    pip-not-picking-up-a-custom-install-cmdclass)
 #BEGIN CUSTOM INSTALL COMMANDS
-#These classes are used to hook into setup.py's install process. Depending on the context:
+#These classes are used to hook into setup.py's install process. Depending on 
+#the context:
 #$ pip install my-package
 
 #Can yield `setup.py install`, `setup.py egg_info`, or `setup.py develop`
@@ -23,18 +27,32 @@ def custom_command(prepend=''):
             shell=True,
             cwd=os.path.join(C_routine_subdir,C_routine))
         process.wait()
+
+def post_build_cmd():
+    C_routine_subdir = 'build/lib/firestudio/utils/C_routines'
+    C_routines = os.listdir(C_routine_subdir)
+    for C_routine in C_routines:
+        process = subprocess.Popen(
+            "make",
+            shell=True,
+            cwd=os.path.join(C_routine_subdir,C_routine))
+        process.wait()
+    return None
         
+class CustomBuild(setuptools.command.build_py.build_py):
+    def run(self):
+        super().run()
+        post_build_cmd()
+
 class CustomInstall(install):
     def run(self):
         custom_command()
         install.run(self)
 
-
 class CustomDevelop(develop):
     def run(self):
         custom_command()
         develop.run(self)
-
 
 class CustomEggInfo(egg_info):
     def run(self):
@@ -48,7 +66,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="firestudio",
-    version="2.1.2b3",
+    version="2.1.2b4",
     author = 'Alex Gurvich',
     author_email = 'agurvich@u.northwestern.edu',
     description="Rendering code for FIRE simulation data.",
@@ -77,6 +95,7 @@ setup(
     cmdclass={
         'install': CustomInstall,
         'develop': CustomDevelop,
-        'egg_info': CustomEggInfo},
+        'egg_info': CustomEggInfo,
+        'build_py': CustomBuild
+    }
 )
-
