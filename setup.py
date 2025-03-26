@@ -7,8 +7,6 @@ from setuptools.command.install import install
 from setuptools.command.develop import develop
 from setuptools.command.egg_info import egg_info
 
-import setuptools.command.build_py
-
 ####
 #(https://stackoverflow.com/questions/19569557/
 #    pip-not-picking-up-a-custom-install-cmdclass)
@@ -29,22 +27,6 @@ def custom_command(prepend=''):
             cwd=os.path.join(C_routine_subdir,C_routine))
         process.wait()
 
-def post_build_cmd():
-    '''
-    The script uses this to run `make` in all the C_routine directories in the
-    `build` directory. When pip copies everything from `build` into 
-    `site-packages`, the compiled C scripts will follow.
-    '''
-    C_routine_subdir = 'build/lib/firestudio/utils/C_routines'
-    C_routines = os.listdir(C_routine_subdir)
-    for C_routine in C_routines:
-        process = subprocess.Popen(
-            "make",
-            shell=True,
-            cwd=os.path.join(C_routine_subdir,C_routine))
-        process.wait()
-    return None
-
 def get_version():
     '''
     Get version number from src/firestudio/__version__.py
@@ -55,11 +37,6 @@ def get_version():
     spec.loader.exec_module(module)
     return module.__version__
         
-class CustomBuild(setuptools.command.build_py.build_py):
-    def run(self):
-        super().run()
-        #post_build_cmd()
-
 class CustomInstall(install):
     def run(self):
         custom_command()
@@ -99,6 +76,7 @@ setup(
     ],
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    package_data={'firestudio.utils': ['C_routines/*']},
     python_requires=">=3.6",
     install_requires=[            
           'abg_python>=1.1.1',
@@ -112,6 +90,5 @@ setup(
         'install': CustomInstall,
         'develop': CustomDevelop,
         'egg_info': CustomEggInfo,
-        'build_py': CustomBuild
     }
 )
