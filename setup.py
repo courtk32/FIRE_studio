@@ -76,7 +76,6 @@ setup(
     ],
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    package_data={'firestudio.utils': ['C_routines/*']},
     python_requires=">=3.6",
     install_requires=[            
           'abg_python>=1.1.1',
