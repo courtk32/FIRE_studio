@@ -8,14 +8,14 @@ from setuptools.command.develop import develop
 from setuptools.command.egg_info import egg_info
 
 ####
-#(https://stackoverflow.com/questions/19569557/
-#    pip-not-picking-up-a-custom-install-cmdclass)
-#BEGIN CUSTOM INSTALL COMMANDS
-#These classes are used to hook into setup.py's install process. Depending on 
-#the context:
-#$ pip install my-package
+# (https://stackoverflow.com/questions/19569557/
+#     pip-not-picking-up-a-custom-install-cmdclass)
+# BEGIN CUSTOM INSTALL COMMANDS
+# These classes are used to hook into setup.py's install process. Depending on 
+# the context:
+# $ pip install my-package
 
-#Can yield `setup.py install`, `setup.py egg_info`, or `setup.py develop`
+# Can yield `setup.py install`, `setup.py egg_info`, or `setup.py develop`
 
 def custom_command(prepend=''):
     C_routine_subdir = 'src/firestudio/utils/C_routines'
