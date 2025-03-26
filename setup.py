@@ -1,5 +1,6 @@
 import subprocess
 import os
+import importlib
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
@@ -7,12 +8,14 @@ from setuptools.command.develop import develop
 from setuptools.command.egg_info import egg_info
 
 ####
-#https://stackoverflow.com/questions/19569557/pip-not-picking-up-a-custom-install-cmdclass
-#BEGIN CUSTOM INSTALL COMMANDS
-#These classes are used to hook into setup.py's install process. Depending on the context:
-#$ pip install my-package
+# (https://stackoverflow.com/questions/19569557/
+#     pip-not-picking-up-a-custom-install-cmdclass)
+# BEGIN CUSTOM INSTALL COMMANDS
+# These classes are used to hook into setup.py's install process. Depending on 
+# the context:
+# $ pip install my-package
 
-#Can yield `setup.py install`, `setup.py egg_info`, or `setup.py develop`
+# Can yield `setup.py install`, `setup.py egg_info`, or `setup.py develop`
 
 def custom_command(prepend=''):
     C_routine_subdir = 'src/firestudio/utils/C_routines'
@@ -23,18 +26,26 @@ def custom_command(prepend=''):
             shell=True,
             cwd=os.path.join(C_routine_subdir,C_routine))
         process.wait()
+
+def get_version():
+    '''
+    Get version number from src/firestudio/__version__.py
+    '''
+    version_file = os.path.join('src', "firestudio", "__version__.py")
+    spec = importlib.util.spec_from_file_location("version", version_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.__version__
         
 class CustomInstall(install):
     def run(self):
         custom_command()
         install.run(self)
 
-
 class CustomDevelop(develop):
     def run(self):
         custom_command()
         develop.run(self)
-
 
 class CustomEggInfo(egg_info):
     def run(self):
@@ -48,7 +59,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="firestudio",
-    version="2.1.2b3",
+    version=get_version(),
     author = 'Alex Gurvich',
     author_email = 'agurvich@u.northwestern.edu',
     description="Rendering code for FIRE simulation data.",
@@ -77,6 +88,6 @@ setup(
     cmdclass={
         'install': CustomInstall,
         'develop': CustomDevelop,
-        'egg_info': CustomEggInfo},
+        'egg_info': CustomEggInfo,
+    }
 )
-
